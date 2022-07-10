@@ -167,53 +167,33 @@ func write_send_mem_core(data [1520]uint8, len uint16) uint8 {
 			// 即使进入读写指针交叉状态 剩余内存依然不足 丢弃数据
 			return 1
 		}
-		if int32(len)-overflow > 0 {
-			head_ptr := (*uint32)(mem_send_cur)
-			// 写入头部 原子操作
-			*head_ptr = head_u32
-			if (int32(len) - overflow) > 4 {
-				// 拷贝前半段数据
-				{
-					internel_slice_ptr := new(reflect.SliceHeader)
-					internel_slice_ptr.Data = uintptr(mem_send_cur) + uintptr(4)
-					internel_slice_ptr.Len = int((int32(len) - overflow) - 4)
-					internel_slice_ptr.Cap = int((int32(len) - overflow) - 4)
-					slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
-					copy(slice_ptr, data[4:])
-				}
-			}
-			mem_send_cur = mem_send_head
-			// 拷贝后半段数据
-			{
-				internel_slice_ptr := new(reflect.SliceHeader)
-				internel_slice_ptr.Data = uintptr(mem_send_cur)
-				internel_slice_ptr.Len = int(overflow)
-				internel_slice_ptr.Cap = int(overflow)
-				slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
-				copy(slice_ptr, data[4+((int32(len)-overflow)-4):])
-			}
-			mem_send_cur = unsafe.Pointer(uintptr(mem_send_cur) + uintptr(overflow))
-			if uintptr(mem_send_cur) >= uintptr(mem_send_head)+RING_BUFFER_SIZE {
-				mem_send_cur = mem_send_head
-			}
-		} else {
-			fmt.Printf("========== fuck ==========\n")
-			mem_send_cur = mem_send_head
-			head_ptr := (*uint32)(mem_send_cur)
-			// 写入头部 原子操作
-			*head_ptr = head_u32
+		head_ptr := (*uint32)(mem_send_cur)
+		// 写入头部 原子操作
+		*head_ptr = head_u32
+		if (int32(len) - overflow) > 4 {
+			// 拷贝前半段数据
 			{
 				internel_slice_ptr := new(reflect.SliceHeader)
 				internel_slice_ptr.Data = uintptr(mem_send_cur) + uintptr(4)
-				internel_slice_ptr.Len = int(len - 4)
-				internel_slice_ptr.Cap = int(len - 4)
+				internel_slice_ptr.Len = int((int32(len) - overflow) - 4)
+				internel_slice_ptr.Cap = int((int32(len) - overflow) - 4)
 				slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
 				copy(slice_ptr, data[4:])
 			}
-			mem_send_cur = unsafe.Pointer(uintptr(mem_send_cur) + uintptr(len))
-			if uintptr(mem_send_cur) >= uintptr(mem_send_head)+RING_BUFFER_SIZE {
-				mem_send_cur = mem_send_head
-			}
+		}
+		mem_send_cur = mem_send_head
+		// 拷贝后半段数据
+		{
+			internel_slice_ptr := new(reflect.SliceHeader)
+			internel_slice_ptr.Data = uintptr(mem_send_cur)
+			internel_slice_ptr.Len = int(overflow)
+			internel_slice_ptr.Cap = int(overflow)
+			slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
+			copy(slice_ptr, data[4+((int32(len)-overflow)-4):])
+		}
+		mem_send_cur = unsafe.Pointer(uintptr(mem_send_cur) + uintptr(overflow))
+		if uintptr(mem_send_cur) >= uintptr(mem_send_head)+RING_BUFFER_SIZE {
+			mem_send_cur = mem_send_head
 		}
 	} else {
 		// 无溢出
@@ -303,58 +283,35 @@ func read_recv_mem(data []uint8, len *uint16) {
 			overflow, *len, mem_recv_cur, mem_recv_head, *recv_pos_pointer_addr)
 	}
 	if overflow >= 0 {
-		if int32(*len)-overflow > 0 {
-			// 拷贝前半段数据
-			{
-				internel_slice_ptr := new(reflect.SliceHeader)
-				internel_slice_ptr.Data = uintptr(mem_recv_cur)
-				internel_slice_ptr.Len = int(int32(*len) - overflow)
-				internel_slice_ptr.Cap = int(int32(*len) - overflow)
-				slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
-				copy(data, slice_ptr)
-			}
-			mem_recv_cur = mem_recv_head
-			// 拷贝后半段数据
-			{
-				internel_slice_ptr := new(reflect.SliceHeader)
-				internel_slice_ptr.Data = uintptr(mem_recv_cur)
-				internel_slice_ptr.Len = int(int32(*len) - (int32(*len) - overflow))
-				internel_slice_ptr.Cap = int(int32(*len) - (int32(*len) - overflow))
-				slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
-				copy(data[int32(*len)-overflow:], slice_ptr)
-			}
-			// 内存对齐
-			aling_size := overflow % 4
-			if aling_size != 0 {
-				aling_size = 4 - aling_size
-			}
-			mem_recv_cur = unsafe.Pointer(uintptr(mem_recv_cur) + uintptr(overflow) + uintptr(aling_size))
-			if uintptr(mem_recv_cur) >= uintptr(mem_recv_head)+RING_BUFFER_SIZE {
-				mem_recv_cur = mem_recv_head
-			}
-			*recv_pos_pointer_addr = mem_recv_cur
-		} else {
-			fmt.Printf("========== fuck ==========\n")
-			mem_recv_cur = mem_recv_head
-			{
-				internel_slice_ptr := new(reflect.SliceHeader)
-				internel_slice_ptr.Data = uintptr(mem_recv_cur)
-				internel_slice_ptr.Len = int(*len)
-				internel_slice_ptr.Cap = int(*len)
-				slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
-				copy(data, slice_ptr)
-			}
-			// 内存对齐
-			aling_size := *len % 4
-			if aling_size != 0 {
-				aling_size = 4 - aling_size
-			}
-			mem_recv_cur = unsafe.Pointer(uintptr(mem_recv_cur) + uintptr(*len) + uintptr(aling_size))
-			if uintptr(mem_recv_cur) >= uintptr(mem_recv_head)+RING_BUFFER_SIZE {
-				mem_recv_cur = mem_recv_head
-			}
-			*recv_pos_pointer_addr = mem_recv_cur
+		// 拷贝前半段数据
+		{
+			internel_slice_ptr := new(reflect.SliceHeader)
+			internel_slice_ptr.Data = uintptr(mem_recv_cur)
+			internel_slice_ptr.Len = int(int32(*len) - overflow)
+			internel_slice_ptr.Cap = int(int32(*len) - overflow)
+			slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
+			copy(data, slice_ptr)
 		}
+		mem_recv_cur = mem_recv_head
+		// 拷贝后半段数据
+		{
+			internel_slice_ptr := new(reflect.SliceHeader)
+			internel_slice_ptr.Data = uintptr(mem_recv_cur)
+			internel_slice_ptr.Len = int(int32(*len) - (int32(*len) - overflow))
+			internel_slice_ptr.Cap = int(int32(*len) - (int32(*len) - overflow))
+			slice_ptr := *(*[]uint8)(unsafe.Pointer(internel_slice_ptr))
+			copy(data[int32(*len)-overflow:], slice_ptr)
+		}
+		// 内存对齐
+		aling_size := overflow % 4
+		if aling_size != 0 {
+			aling_size = 4 - aling_size
+		}
+		mem_recv_cur = unsafe.Pointer(uintptr(mem_recv_cur) + uintptr(overflow) + uintptr(aling_size))
+		if uintptr(mem_recv_cur) >= uintptr(mem_recv_head)+RING_BUFFER_SIZE {
+			mem_recv_cur = mem_recv_head
+		}
+		*recv_pos_pointer_addr = mem_recv_cur
 	} else {
 		{
 			internel_slice_ptr := new(reflect.SliceHeader)
