@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"runtime"
 	"time"
 	"unsafe"
 )
@@ -51,6 +52,7 @@ func Handle() {
 
 func Loopback() {
 	go func() {
+		runtime.LockOSThread()
 		pkt_rx_buf := make([]uint8, 1514)
 		pkt_len := uint16(0)
 		for {
@@ -69,6 +71,7 @@ func Loopback() {
 }
 
 func rx_pkt() {
+	runtime.LockOSThread()
 	pkt_rx_buf := make([]uint8, 1514)
 	pkt_len := uint16(0)
 	for {
